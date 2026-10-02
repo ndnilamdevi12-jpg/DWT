@@ -1,0 +1,590 @@
+{
+  "entities": {
+    "Video": {
+      "title": "Video",
+      "description": "YouTube video item curated by DecodeWithTech admin",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Video title",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "youtube_url": {
+          "type": "string",
+          "description": "Actual YouTube URL provided by admin",
+          "minLength": 10,
+          "maxLength": 500
+        },
+        "youtube_id": {
+          "type": "string",
+          "description": "Extracted 11-character YouTube video ID",
+          "minLength": 5,
+          "maxLength": 64
+        },
+        "thumbnail": {
+          "type": "string",
+          "description": "Thumbnail image URL or data URI",
+          "minLength": 5,
+          "maxLength": 200000
+        },
+        "description": {
+          "type": "string",
+          "description": "Short video description",
+          "minLength": 0,
+          "maxLength": 1000
+        },
+        "category": {
+          "type": "string",
+          "description": "Optional video category",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "display_order": {
+          "type": "number",
+          "description": "Numeric ordering index"
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication state",
+          "enum": ["published", "draft", "hidden"]
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who created the item",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "title",
+        "youtube_url",
+        "youtube_id",
+        "thumbnail",
+        "description",
+        "category",
+        "display_order",
+        "status",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Article": {
+      "title": "Article",
+      "description": "Explain section story/article written for DecodeWithTech",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Article headline",
+          "minLength": 1,
+          "maxLength": 250
+        },
+        "thumbnail": {
+          "type": "string",
+          "description": "Article hero thumbnail URL or data URI",
+          "minLength": 5,
+          "maxLength": 200000
+        },
+        "short_description": {
+          "type": "string",
+          "description": "Short preview description for cards",
+          "minLength": 1,
+          "maxLength": 600
+        },
+        "introduction": {
+          "type": "string",
+          "description": "Introduction section of the article",
+          "minLength": 0,
+          "maxLength": 5000
+        },
+        "history": {
+          "type": "string",
+          "description": "History section of the article",
+          "minLength": 0,
+          "maxLength": 8000
+        },
+        "main_story": {
+          "type": "string",
+          "description": "Main story section of the article",
+          "minLength": 0,
+          "maxLength": 15000
+        },
+        "how_it_works": {
+          "type": "string",
+          "description": "How it works technical explanation",
+          "minLength": 0,
+          "maxLength": 10000
+        },
+        "important_details": {
+          "type": "string",
+          "description": "Key takeaways and important details",
+          "minLength": 0,
+          "maxLength": 8000
+        },
+        "conclusion": {
+          "type": "string",
+          "description": "Conclusion section",
+          "minLength": 0,
+          "maxLength": 5000
+        },
+        "content": {
+          "type": "string",
+          "description": "Combined or additional formatted story body",
+          "minLength": 0,
+          "maxLength": 30000
+        },
+        "audio_url": {
+          "type": "string",
+          "description": "Optional pre-generated audio URL or data URI",
+          "minLength": 0,
+          "maxLength": 600000
+        },
+        "display_order": {
+          "type": "number",
+          "description": "Display order index"
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication state",
+          "enum": ["published", "draft", "hidden"]
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who created the article",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "title",
+        "thumbnail",
+        "short_description",
+        "introduction",
+        "history",
+        "main_story",
+        "how_it_works",
+        "important_details",
+        "conclusion",
+        "content",
+        "audio_url",
+        "display_order",
+        "status",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Curated affiliate/shopping product item",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Product name",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "image": {
+          "type": "string",
+          "description": "Product image URL or data URI",
+          "minLength": 5,
+          "maxLength": 200000
+        },
+        "description": {
+          "type": "string",
+          "description": "Short product description",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "product_url": {
+          "type": "string",
+          "description": "Actual external product link provided by admin",
+          "minLength": 8,
+          "maxLength": 1000
+        },
+        "price_text": {
+          "type": "string",
+          "description": "Optional price label",
+          "minLength": 0,
+          "maxLength": 100
+        },
+        "badge": {
+          "type": "string",
+          "description": "Optional product label",
+          "minLength": 0,
+          "maxLength": 60
+        },
+        "button_text": {
+          "type": "string",
+          "description": "CTA button label",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "display_order": {
+          "type": "number",
+          "description": "Display order index"
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication state",
+          "enum": ["published", "draft", "hidden"]
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who created the product",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "name",
+        "image",
+        "description",
+        "product_url",
+        "price_text",
+        "badge",
+        "button_text",
+        "display_order",
+        "status",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SocialLink": {
+      "title": "SocialLink",
+      "description": "Social media profile card configured by admin",
+      "type": "object",
+      "properties": {
+        "platform": {
+          "type": "string",
+          "description": "Social media platform name",
+          "enum": ["YouTube", "Instagram", "Facebook", "X", "Other"]
+        },
+        "profile_url": {
+          "type": "string",
+          "description": "Actual profile URL",
+          "minLength": 8,
+          "maxLength": 500
+        },
+        "custom_image": {
+          "type": "string",
+          "description": "Custom profile image URL or data URI",
+          "minLength": 0,
+          "maxLength": 200000
+        },
+        "display_name": {
+          "type": "string",
+          "description": "Display name on card",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "handle": {
+          "type": "string",
+          "description": "Channel or social handle",
+          "minLength": 0,
+          "maxLength": 120
+        },
+        "follower_count": {
+          "type": "string",
+          "description": "Admin-defined subscriber/follower text",
+          "minLength": 0,
+          "maxLength": 80
+        },
+        "description": {
+          "type": "string",
+          "description": "Short channel description",
+          "minLength": 0,
+          "maxLength": 500
+        },
+        "display_order": {
+          "type": "number",
+          "description": "Display order index"
+        },
+        "status": {
+          "type": "string",
+          "description": "Publication state",
+          "enum": ["published", "draft", "hidden"]
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who created the link",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "platform",
+        "profile_url",
+        "custom_image",
+        "display_name",
+        "handle",
+        "follower_count",
+        "description",
+        "display_order",
+        "status",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "SiteSettings": {
+      "title": "SiteSettings",
+      "description": "Global site configuration and visibility toggles",
+      "type": "object",
+      "properties": {
+        "logo_svg": {
+          "type": "string",
+          "description": "Raw SVG markup for DecodeWithTech logo",
+          "minLength": 10,
+          "maxLength": 150000
+        },
+        "brand_name": {
+          "type": "string",
+          "description": "Brand title",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "tagline": {
+          "type": "string",
+          "description": "Channel tagline",
+          "minLength": 0,
+          "maxLength": 250
+        },
+        "hero_title": {
+          "type": "string",
+          "description": "Home hero title",
+          "minLength": 0,
+          "maxLength": 250
+        },
+        "hero_subtitle": {
+          "type": "string",
+          "description": "Home hero subtitle",
+          "minLength": 0,
+          "maxLength": 600
+        },
+        "youtube_channel_url": {
+          "type": "string",
+          "description": "Primary YouTube channel URL",
+          "minLength": 8,
+          "maxLength": 500
+        },
+        "about_text": {
+          "type": "string",
+          "description": "About DecodeWithTech text",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "disclaimer_text": {
+          "type": "string",
+          "description": "Full website disclaimer text",
+          "minLength": 1,
+          "maxLength": 5000
+        },
+        "shopping_disclaimer": {
+          "type": "string",
+          "description": "Affiliate disclaimer shown under shopping section",
+          "minLength": 1,
+          "maxLength": 1500
+        },
+        "footer_text": {
+          "type": "string",
+          "description": "Footer copyright or note",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "show_videos": {
+          "type": "boolean",
+          "description": "Toggle video section visibility"
+        },
+        "show_social": {
+          "type": "boolean",
+          "description": "Toggle social section visibility"
+        },
+        "show_shopping": {
+          "type": "boolean",
+          "description": "Toggle shopping section visibility"
+        },
+        "show_explain": {
+          "type": "boolean",
+          "description": "Toggle explain section visibility"
+        },
+        "authorId": {
+          "type": "string",
+          "description": "UID of the admin who updated settings",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": [
+        "logo_svg",
+        "brand_name",
+        "tagline",
+        "hero_title",
+        "hero_subtitle",
+        "youtube_channel_url",
+        "about_text",
+        "disclaimer_text",
+        "shopping_disclaimer",
+        "footer_text",
+        "show_videos",
+        "show_social",
+        "show_shopping",
+        "show_explain",
+        "authorId",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Authorized admin identity document keyed by UID",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the admin",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "role": {
+          "type": "string",
+          "description": "Admin role identifier",
+          "enum": ["admin"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Admin account status",
+          "enum": ["active"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["uid", "role", "status", "createdAt"]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile document storing editable display name for Menu Profile view",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID of the user",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Editable display name of the user",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server update timestamp"
+        }
+      },
+      "required": ["uid", "displayName", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/videos/{videoId}": {
+      "schema": { "$ref": "#/entities/Video" },
+      "description": "Curated YouTube videos for DecodeWithTech"
+    },
+    "/articles/{articleId}": {
+      "schema": { "$ref": "#/entities/Article" },
+      "description": "Long-form Explain stories and articles"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Curated Shopping with DWT products"
+    },
+    "/social_links/{socialId}": {
+      "schema": { "$ref": "#/entities/SocialLink" },
+      "description": "Dynamic social media profile cards"
+    },
+    "/site_settings/{settingId}": {
+      "schema": { "$ref": "#/entities/SiteSettings" },
+      "description": "Global DecodeWithTech website settings and section toggles"
+    },
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Admin role registry keyed by Firebase Auth UID"
+    },
+    "/user_profiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "User profile record storing editable display name"
+    }
+  }
+}

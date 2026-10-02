@@ -1,0 +1,6 @@
+{
+  "name": "DecodeWithTech – Official Technology & Science Companion",
+  "description": "Official companion platform for the DecodeWithTech YouTube channel featuring technology stories, engineering explainers, videos, and curated gear.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

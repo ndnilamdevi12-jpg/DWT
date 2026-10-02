@@ -1,0 +1,298 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ---------------------------------------------------------
+    // Primitive Helpers
+    // ---------------------------------------------------------
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isBootstrappedAdmin() {
+      return isVerifiedUser() && request.auth.token.email == 'ndnilamdevi12@gmail.com';
+    }
+
+    function isAdmin() {
+      return isVerifiedUser() && (
+        isBootstrappedAdmin() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function isValidStatus(status) {
+      return status is string && (status == 'published' || status == 'draft' || status == 'hidden');
+    }
+
+    // ---------------------------------------------------------
+    // Validation Blueprints
+    // ---------------------------------------------------------
+    function isValidAdminRecord(data, adminUid) {
+      return data.keys().hasAll(['uid', 'role', 'status', 'createdAt']) &&
+        data.keys().hasOnly(['uid', 'role', 'status', 'createdAt']) &&
+        data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+        data.uid == adminUid &&
+        data.uid == request.auth.uid &&
+        data.role is string && data.role == 'admin' &&
+        data.status is string && data.status == 'active' &&
+        data.createdAt is timestamp;
+    }
+
+    function isValidUserProfile(data, userId) {
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt']) &&
+        data.keys().hasOnly(['uid', 'displayName', 'createdAt', 'updatedAt']) &&
+        data.uid is string && isValidId(data.uid) &&
+        data.uid == userId &&
+        data.uid == request.auth.uid &&
+        data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidVideo(data) {
+      return data.keys().hasAll([
+          'title', 'youtube_url', 'youtube_id', 'thumbnail', 'description',
+          'category', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'youtube_url', 'youtube_id', 'thumbnail', 'description',
+          'category', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.youtube_url is string && data.youtube_url.size() >= 10 && data.youtube_url.size() <= 500 &&
+        data.youtube_id is string && data.youtube_id.size() >= 5 && data.youtube_id.size() <= 64 &&
+        data.thumbnail is string && data.thumbnail.size() >= 5 && data.thumbnail.size() <= 200000 &&
+        data.description is string && data.description.size() <= 1000 &&
+        data.category is string && data.category.size() <= 100 &&
+        data.display_order is number &&
+        isValidStatus(data.status) &&
+        data.authorId is string && isValidId(data.authorId) && data.authorId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidArticle(data) {
+      return data.keys().hasAll([
+          'title', 'thumbnail', 'short_description', 'introduction', 'history',
+          'main_story', 'how_it_works', 'important_details', 'conclusion',
+          'content', 'audio_url', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'title', 'thumbnail', 'short_description', 'introduction', 'history',
+          'main_story', 'how_it_works', 'important_details', 'conclusion',
+          'content', 'audio_url', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 250 &&
+        data.thumbnail is string && data.thumbnail.size() >= 5 && data.thumbnail.size() <= 200000 &&
+        data.short_description is string && data.short_description.size() >= 1 && data.short_description.size() <= 600 &&
+        data.introduction is string && data.introduction.size() <= 5000 &&
+        data.history is string && data.history.size() <= 8000 &&
+        data.main_story is string && data.main_story.size() <= 15000 &&
+        data.how_it_works is string && data.how_it_works.size() <= 10000 &&
+        data.important_details is string && data.important_details.size() <= 8000 &&
+        data.conclusion is string && data.conclusion.size() <= 5000 &&
+        data.content is string && data.content.size() <= 30000 &&
+        data.audio_url is string && data.audio_url.size() <= 600000 &&
+        data.display_order is number &&
+        isValidStatus(data.status) &&
+        data.authorId is string && isValidId(data.authorId) && data.authorId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+          'name', 'image', 'description', 'product_url', 'price_text',
+          'badge', 'button_text', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'name', 'image', 'description', 'product_url', 'price_text',
+          'badge', 'button_text', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 200 &&
+        data.image is string && data.image.size() >= 5 && data.image.size() <= 200000 &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 1000 &&
+        data.product_url is string && data.product_url.size() >= 8 && data.product_url.size() <= 1000 &&
+        data.price_text is string && data.price_text.size() <= 100 &&
+        data.badge is string && data.badge.size() <= 60 &&
+        data.button_text is string && data.button_text.size() >= 1 && data.button_text.size() <= 80 &&
+        data.display_order is number &&
+        isValidStatus(data.status) &&
+        data.authorId is string && isValidId(data.authorId) && data.authorId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSocialLink(data) {
+      return data.keys().hasAll([
+          'platform', 'profile_url', 'custom_image', 'display_name', 'handle',
+          'follower_count', 'description', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'platform', 'profile_url', 'custom_image', 'display_name', 'handle',
+          'follower_count', 'description', 'display_order', 'status', 'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.platform is string && (
+          data.platform == 'YouTube' ||
+          data.platform == 'Instagram' ||
+          data.platform == 'Facebook' ||
+          data.platform == 'X' ||
+          data.platform == 'Other'
+        ) &&
+        data.profile_url is string && data.profile_url.size() >= 8 && data.profile_url.size() <= 500 &&
+        data.custom_image is string && data.custom_image.size() <= 200000 &&
+        data.display_name is string && data.display_name.size() >= 1 && data.display_name.size() <= 120 &&
+        data.handle is string && data.handle.size() <= 120 &&
+        data.follower_count is string && data.follower_count.size() <= 80 &&
+        data.description is string && data.description.size() <= 500 &&
+        data.display_order is number &&
+        isValidStatus(data.status) &&
+        data.authorId is string && isValidId(data.authorId) && data.authorId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidSiteSettings(data) {
+      return data.keys().hasAll([
+          'logo_svg', 'brand_name', 'tagline', 'hero_title', 'hero_subtitle',
+          'youtube_channel_url', 'about_text', 'disclaimer_text', 'shopping_disclaimer',
+          'footer_text', 'show_videos', 'show_social', 'show_shopping', 'show_explain',
+          'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.keys().hasOnly([
+          'logo_svg', 'brand_name', 'tagline', 'hero_title', 'hero_subtitle',
+          'youtube_channel_url', 'about_text', 'disclaimer_text', 'shopping_disclaimer',
+          'footer_text', 'show_videos', 'show_social', 'show_shopping', 'show_explain',
+          'authorId', 'createdAt', 'updatedAt'
+        ]) &&
+        data.logo_svg is string && data.logo_svg.size() >= 10 && data.logo_svg.size() <= 150000 &&
+        data.brand_name is string && data.brand_name.size() >= 1 && data.brand_name.size() <= 100 &&
+        data.tagline is string && data.tagline.size() <= 250 &&
+        data.hero_title is string && data.hero_title.size() <= 250 &&
+        data.hero_subtitle is string && data.hero_subtitle.size() <= 600 &&
+        data.youtube_channel_url is string && data.youtube_channel_url.size() >= 8 && data.youtube_channel_url.size() <= 500 &&
+        data.about_text is string && data.about_text.size() >= 1 && data.about_text.size() <= 8000 &&
+        data.disclaimer_text is string && data.disclaimer_text.size() >= 1 && data.disclaimer_text.size() <= 5000 &&
+        data.shopping_disclaimer is string && data.shopping_disclaimer.size() >= 1 && data.shopping_disclaimer.size() <= 1500 &&
+        data.footer_text is string && data.footer_text.size() >= 1 && data.footer_text.size() <= 500 &&
+        data.show_videos is bool &&
+        data.show_social is bool &&
+        data.show_shopping is bool &&
+        data.show_explain is bool &&
+        data.authorId is string && isValidId(data.authorId) && data.authorId == request.auth.uid &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // ---------------------------------------------------------
+    // Collection Rules
+    // ---------------------------------------------------------
+
+    match /admins/{adminUid} {
+      allow get: if isVerifiedUser() && isValidId(adminUid) && request.auth.uid == adminUid && isAdmin();
+      allow list: if false;
+      allow create: if isBootstrappedAdmin() && isValidId(adminUid) && isValidAdminRecord(incoming(), adminUid) && incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    match /user_profiles/{userId} {
+      allow get: if isVerifiedUser() && isValidId(userId) && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isVerifiedUser() && isValidId(userId) && isValidUserProfile(incoming(), userId) && incoming().createdAt == request.time && incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() && isValidId(userId) && isValidUserProfile(incoming(), userId) && incoming().uid == existing().uid && incoming().createdAt == existing().createdAt && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'updatedAt'])
+      );
+      allow delete: if false;
+    }
+
+    match /videos/{videoId} {
+      allow get: if isValidId(videoId) && ((resource != null && existing().status == 'published') || isAdmin());
+      allow list: if existing().status == 'published' || (isVerifiedUser() && existing().authorId == request.auth.uid);
+      allow create: if isVerifiedUser() && isValidId(videoId) && isValidVideo(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(videoId) && isValidVideo(incoming()) && incoming().createdAt == existing().createdAt && incoming().authorId == existing().authorId && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'youtube_url', 'youtube_id', 'thumbnail', 'description',
+          'category', 'display_order', 'status', 'updatedAt'
+        ])
+      ) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(videoId) && isAdmin();
+    }
+
+    match /articles/{articleId} {
+      allow get: if isValidId(articleId) && ((resource != null && existing().status == 'published') || isAdmin());
+      allow list: if existing().status == 'published' || (isVerifiedUser() && existing().authorId == request.auth.uid);
+      allow create: if isVerifiedUser() && isValidId(articleId) && isValidArticle(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(articleId) && isValidArticle(incoming()) && incoming().createdAt == existing().createdAt && incoming().authorId == existing().authorId && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'title', 'thumbnail', 'short_description', 'introduction', 'history',
+          'main_story', 'how_it_works', 'important_details', 'conclusion',
+          'content', 'audio_url', 'display_order', 'status', 'updatedAt'
+        ])
+      ) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(articleId) && isAdmin();
+    }
+
+    match /products/{productId} {
+      allow get: if isValidId(productId) && ((resource != null && existing().status == 'published') || isAdmin());
+      allow list: if existing().status == 'published' || (isVerifiedUser() && existing().authorId == request.auth.uid);
+      allow create: if isVerifiedUser() && isValidId(productId) && isValidProduct(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(productId) && isValidProduct(incoming()) && incoming().createdAt == existing().createdAt && incoming().authorId == existing().authorId && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'image', 'description', 'product_url', 'price_text',
+          'badge', 'button_text', 'display_order', 'status', 'updatedAt'
+        ])
+      ) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(productId) && isAdmin();
+    }
+
+    match /social_links/{socialId} {
+      allow get: if isValidId(socialId) && ((resource != null && existing().status == 'published') || isAdmin());
+      allow list: if existing().status == 'published' || (isVerifiedUser() && existing().authorId == request.auth.uid);
+      allow create: if isVerifiedUser() && isValidId(socialId) && isValidSocialLink(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(socialId) && isValidSocialLink(incoming()) && incoming().createdAt == existing().createdAt && incoming().authorId == existing().authorId && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'platform', 'profile_url', 'custom_image', 'display_name', 'handle',
+          'follower_count', 'description', 'display_order', 'status', 'updatedAt'
+        ])
+      ) && isAdmin();
+      allow delete: if isVerifiedUser() && isValidId(socialId) && isAdmin();
+    }
+
+    match /site_settings/{settingId} {
+      allow get: if isValidId(settingId) && settingId == 'main';
+      allow list: if false;
+      allow create: if isVerifiedUser() && isValidId(settingId) && settingId == 'main' && isValidSiteSettings(incoming()) && incoming().createdAt == request.time && incoming().updatedAt == request.time && isAdmin();
+      allow update: if isVerifiedUser() && isValidId(settingId) && settingId == 'main' && isValidSiteSettings(incoming()) && incoming().createdAt == existing().createdAt && incoming().authorId == existing().authorId && incoming().updatedAt == request.time && (
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'logo_svg', 'brand_name', 'tagline', 'hero_title', 'hero_subtitle',
+          'youtube_channel_url', 'about_text', 'disclaimer_text', 'shopping_disclaimer',
+          'footer_text', 'show_videos', 'show_social', 'show_shopping', 'show_explain', 'updatedAt'
+        ])
+      ) && isAdmin();
+      allow delete: if false;
+    }
+  }
+}

@@ -1,0 +1,74 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-display: 'Syne', sans-serif;
+    --font-sans: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+    --font-serif: 'Lora', Georgia, serif;
+    --font-mono: 'JetBrains Mono', monospace;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: #ffffff;
+    color: #0a0a0a;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    text-wrap: balance;
+  }
+
+  .font-editorial {
+    font-family: var(--font-serif);
+  }
+
+  .font-mono-num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Single continuous slow-moving orange/saffron ambient glow (Top -> Right -> Bottom -> Left -> Center -> repeat) */
+@keyframes dwtAmbientOrbit {
+  0% {
+    transform: translate3d(0vw, -18vh, 0) scale(1);
+  }
+  20% {
+    transform: translate3d(26vw, 4vh, 0) scale(1.06);
+  }
+  40% {
+    transform: translate3d(4vw, 28vh, 0) scale(0.96);
+  }
+  60% {
+    transform: translate3d(-26vw, 8vh, 0) scale(1.04);
+  }
+  80% {
+    transform: translate3d(0vw, 4vh, 0) scale(1);
+  }
+  100% {
+    transform: translate3d(0vw, -18vh, 0) scale(1);
+  }
+}
+
+.dwt-ambient-glow {
+  will-change: transform;
+  animation: dwtAmbientOrbit 38s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dwt-ambient-glow {
+    animation: none !important;
+    transform: translate3d(0, 0, 0) !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
