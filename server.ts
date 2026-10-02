@@ -3,14 +3,40 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import dotenv from 'dotenv';
+import { initializeApp as initializeAdminApp, getApps as getAdminApps } from 'firebase-admin/app';
+import { getAuth as getAdminAuth, DecodedIdToken } from 'firebase-admin/auth';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Server-side secret admin allowlist (always includes owner email ndnilamdevi12@gmail.com)
-const ADMIN_ALLOWLIST = new Set([
+// Load public Firebase project ID for cryptographic token audience/issuer verification
+const firebaseConfigPath = path.join(__dirname, 'firebase-applet-config.json');
+const firebaseConfig = JSON.parse(fs.readFileSync(firebaseConfigPath, 'utf8')) as {
+  projectId: string;
+};
+const FIREBASE_PROJECT_ID = firebaseConfig.projectId;
+
+const adminApp =
+  getAdminApps().length > 0
+    ? getAdminApps()[0]!
+    : initializeAdminApp({
+        projectId: FIREBASE_PROJECT_ID,
+      });
+
+const adminAuth = getAdminAuth(adminApp);
+
+// Server-side admin UID allowlist (preferred)
+const ADMIN_UID_ALLOWLIST = new Set(
+  (process.env.ADMIN_UIDS || '')
+    .split(',')
+    .map((uid) => uid.trim())
+    .filter(Boolean)
+);
+
+// Server-side admin email allowlist (only evaluated against cryptographically verified Firebase ID tokens with email_verified === true)
+const ADMIN_EMAIL_ALLOWLIST = new Set([
   'ndnilamdevi12@gmail.com',
   ...(process.env.ADMIN_EMAIL || '')
     .split(',')
@@ -60,7 +86,7 @@ function writeServerStore(next: Record<string, unknown>) {
   }
 }
 
-// Simple in-memory rate limiter for authentication checks
+// In-memory rate limiter for authentication & admin endpoints
 const authRateLimit = new Map<string, { count: number; resetAt: number }>();
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
@@ -99,67 +125,75 @@ function extractYouTubeId(rawUrl: string): string | null {
   }
 }
 
-async function resolveVerifiedIdentity(req: express.Request) {
+/**
+ * Cryptographically verifies the Firebase ID token from the Authorization: Bearer header
+ * using the official Firebase Admin SDK.
+ * Never trusts client-supplied body/query/header email, uid, or unverified JWT payloads.
+ */
+async function verifyFirebaseIdToken(req: express.Request): Promise<DecodedIdToken | null> {
   const authHeader = req.headers.authorization;
-  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
-  const bodyEmail =
-    typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
-  const bodyUid = typeof req.body?.uid === 'string' ? req.body.uid.trim() : '';
-
-  if (token) {
-    // 1. Try decoding JWT (Firebase ID Token or Google ID Token)
-    const parts = token.split('.');
-    if (parts.length === 3) {
-      try {
-        const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-        const payload = JSON.parse(payloadJson) || {};
-        const nowSec = Math.floor(Date.now() / 1000);
-        if (!payload.exp || payload.exp >= nowSec - 60) {
-          const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
-          const isVerified = payload.email_verified !== false;
-          const isAdmin = Boolean(isVerified && email && ADMIN_ALLOWLIST.has(email));
-          return {
-            email,
-            uid: payload.sub || bodyUid || `google_${email.replace(/[^a-z0-9]/g, '_')}`,
-            isAdmin,
-          };
-        }
-      } catch {
-        // Proceed to OAuth access_token check
-      }
-    }
-
-    // 2. Try verifying as Google OAuth 2.0 access_token via Google userinfo endpoint
-    try {
-      const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (userInfoRes.ok) {
-        const info = (await userInfoRes.json()) || {};
-        const email = typeof info.email === 'string' ? info.email.trim().toLowerCase() : '';
-        const isVerified = info.email_verified !== false;
-        const isAdmin = Boolean(isVerified && email && ADMIN_ALLOWLIST.has(email));
-        return {
-          email,
-          uid: info.sub || bodyUid || `google_${email.replace(/[^a-z0-9]/g, '_')}`,
-          isAdmin,
-        };
-      }
-    } catch {
-      // Fallback to body email check
-    }
+  if (!authHeader || typeof authHeader !== 'string' || !authHeader.startsWith('Bearer ')) {
+    return null;
   }
 
-  if (bodyEmail) {
-    const isAdmin = ADMIN_ALLOWLIST.has(bodyEmail);
-    return {
-      email: bodyEmail,
-      uid: bodyUid || `google_${bodyEmail.replace(/[^a-z0-9]/g, '_')}`,
-      isAdmin,
-    };
+  const idToken = authHeader.slice(7).trim();
+  if (!idToken || idToken.split('.').length !== 3) {
+    return null;
   }
 
-  return { email: '', uid: '', isAdmin: false };
+  try {
+    const decoded = await adminAuth.verifyIdToken(idToken);
+    const nowSec = Math.floor(Date.now() / 1000);
+    const expectedIssuer = `https://securetoken.google.com/${FIREBASE_PROJECT_ID}`;
+
+    if (
+      !decoded ||
+      typeof decoded.uid !== 'string' ||
+      !decoded.uid.trim() ||
+      decoded.aud !== FIREBASE_PROJECT_ID ||
+      decoded.iss !== expectedIssuer ||
+      typeof decoded.exp !== 'number' ||
+      decoded.exp <= nowSec
+    ) {
+      return null;
+    }
+
+    return decoded;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Determines whether a cryptographically verified Firebase user is an authorized administrator.
+ * Evaluates Firebase custom claims, server-side ADMIN_UIDS, or verified email against server-side allowlist.
+ */
+function isAuthorizedAdmin(decoded: DecodedIdToken): boolean {
+  if (!decoded || typeof decoded.uid !== 'string' || !decoded.uid.trim()) {
+    return false;
+  }
+
+  // 1. Check Firebase custom claims on the verified token
+  if (decoded.admin === true || decoded.role === 'admin') {
+    return true;
+  }
+
+  // 2. Check server-side ADMIN_UIDS environment variable
+  if (ADMIN_UID_ALLOWLIST.has(decoded.uid)) {
+    return true;
+  }
+
+  // 3. Check verified email from the cryptographically verified token against server-side allowlist
+  const verifiedEmail =
+    decoded.email_verified === true && typeof decoded.email === 'string'
+      ? decoded.email.trim().toLowerCase()
+      : '';
+
+  if (verifiedEmail && ADMIN_EMAIL_ALLOWLIST.has(verifiedEmail)) {
+    return true;
+  }
+
+  return false;
 }
 
 async function startServer() {
@@ -171,8 +205,8 @@ async function startServer() {
 
   // ---------------------------------------------------------------------------
   // POST /api/auth/verify-admin
-  // Server-side verification of Firebase ID token / Google OAuth token / email
-  // against server-side allowlist (ndnilamdevi12@gmail.com).
+  // Cryptographically verifies Firebase ID token via Firebase Admin SDK and
+  // checks server-side admin authorization. Never trusts req.body.email or uid.
   // ---------------------------------------------------------------------------
   app.post('/api/auth/verify-admin', async (req, res) => {
     const ip = req.ip || 'unknown';
@@ -181,42 +215,64 @@ async function startServer() {
       return;
     }
 
-    const identity = await resolveVerifiedIdentity(req);
+    const decoded = await verifyFirebaseIdToken(req);
+    if (!decoded) {
+      res.status(401).json({
+        isAdmin: false,
+        error: 'Unauthorized: A valid Firebase ID token is required.',
+      });
+      return;
+    }
+
+    const isAdmin = isAuthorizedAdmin(decoded);
+    if (!isAdmin) {
+      res.status(403).json({
+        isAdmin: false,
+        error: 'Forbidden: Account is not an authorized administrator.',
+      });
+      return;
+    }
+
     const store = readServerStore();
-    const profileKey = identity.uid || identity.email;
     const profilesMap = store.profiles as Record<string, { displayName?: string }>;
-    const savedProfile = profileKey ? profilesMap[profileKey] : undefined;
+    const savedProfile = profilesMap[decoded.uid];
 
     res.json({
-      isAdmin: identity.isAdmin,
-      uid: identity.uid || null,
+      isAdmin: true,
+      uid: decoded.uid,
       displayName: savedProfile?.displayName || null,
     });
   });
 
   // ---------------------------------------------------------------------------
   // POST /api/profile/update
-  // Saves user's editable displayName (Menu Profile section)
+  // Saves authenticated user's editable displayName using verified token UID only
   // ---------------------------------------------------------------------------
   app.post('/api/profile/update', async (req, res) => {
-    const identity = await resolveVerifiedIdentity(req);
+    const ip = req.ip || 'unknown';
+    if (!checkRateLimit(ip)) {
+      res.status(429).json({ error: 'Too many requests. Please wait.' });
+      return;
+    }
+
+    const decoded = await verifyFirebaseIdToken(req);
+    if (!decoded) {
+      res.status(401).json({ error: 'Unauthorized: A valid Firebase ID token is required.' });
+      return;
+    }
+
     const rawName = typeof req.body?.displayName === 'string' ? req.body.displayName.trim() : '';
     const cleanName = rawName.slice(0, 80);
 
-    if (!cleanName || (!identity.uid && !identity.email)) {
-      res.status(400).json({ error: 'Valid user session and display name are required.' });
+    if (!cleanName) {
+      res.status(400).json({ error: 'A valid display name is required.' });
       return;
     }
 
     const store = readServerStore();
     const profilesMap = store.profiles as Record<string, { displayName: string; updatedAt: string }>;
     const updatedAt = new Date().toISOString();
-    if (identity.uid) {
-      profilesMap[identity.uid] = { displayName: cleanName, updatedAt };
-    }
-    if (identity.email) {
-      profilesMap[identity.email] = { displayName: cleanName, updatedAt };
-    }
+    profilesMap[decoded.uid] = { displayName: cleanName, updatedAt };
     writeServerStore(store);
 
     res.json({ ok: true, displayName: cleanName });
@@ -224,21 +280,39 @@ async function startServer() {
 
   // ---------------------------------------------------------------------------
   // GET /api/content
-  // Returns server-persisted content store for fast initial load & fallback sync
+  // Returns public site content only (excludes user profiles)
   // ---------------------------------------------------------------------------
   app.get('/api/content', (_req, res) => {
     const store = readServerStore();
-    res.json(store);
+    res.json({
+      settings: store.settings,
+      videos: store.videos,
+      articles: store.articles,
+      products: store.products,
+      socialLinks: store.socialLinks,
+    });
   });
 
   // ---------------------------------------------------------------------------
   // POST /api/content/sync
-  // Admin-only endpoint to persist settings, videos, articles, products, socials
+  // Admin-only endpoint to persist settings, videos, articles, products, socials.
+  // Independently verifies Firebase ID token and admin status on the server.
   // ---------------------------------------------------------------------------
   app.post('/api/content/sync', async (req, res) => {
-    const identity = await resolveVerifiedIdentity(req);
-    if (!identity.isAdmin) {
-      res.status(403).json({ error: 'Admin authorization required.' });
+    const ip = req.ip || 'unknown';
+    if (!checkRateLimit(ip)) {
+      res.status(429).json({ error: 'Too many requests. Please wait.' });
+      return;
+    }
+
+    const decoded = await verifyFirebaseIdToken(req);
+    if (!decoded) {
+      res.status(401).json({ error: 'Unauthorized: A valid Firebase ID token is required.' });
+      return;
+    }
+
+    if (!isAuthorizedAdmin(decoded)) {
+      res.status(403).json({ error: 'Forbidden: Admin authorization required.' });
       return;
     }
 
@@ -260,7 +334,16 @@ async function startServer() {
     }
     writeServerStore(store);
 
-    res.json({ ok: true, store });
+    res.json({
+      ok: true,
+      store: {
+        settings: store.settings,
+        videos: store.videos,
+        articles: store.articles,
+        products: store.products,
+        socialLinks: store.socialLinks,
+      },
+    });
   });
 
   // ---------------------------------------------------------------------------

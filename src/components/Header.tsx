@@ -24,10 +24,7 @@ interface HeaderProps {
   userPhotoUrl: string | null;
   isAdmin: boolean;
   authLoading: boolean;
-  showGoogleAccountPicker: boolean;
   onLogin: () => void;
-  onDirectGoogleSignIn: (email: string, name?: string) => Promise<void>;
-  onCloseGooglePicker: () => void;
   onLogout: () => void;
   onUpdateDisplayName: (newName: string) => Promise<void>;
 }
@@ -42,10 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   userPhotoUrl,
   isAdmin,
   authLoading,
-  showGoogleAccountPicker,
   onLogin,
-  onDirectGoogleSignIn,
-  onCloseGooglePicker,
   onLogout,
   onUpdateDisplayName,
 }) => {
@@ -55,11 +49,6 @@ export const Header: React.FC<HeaderProps> = ({
   const [nameInput, setNameInput] = useState(userDisplayName);
   const [savingName, setSavingName] = useState(false);
   const [nameSavedMsg, setNameSavedMsg] = useState(false);
-
-  // Custom Google account input inside Menu picker
-  const [useCustomAccount, setUseCustomAccount] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [customName, setCustomName] = useState('');
 
   useEffect(() => {
     setNameInput(userDisplayName);
@@ -101,23 +90,6 @@ export const Header: React.FC<HeaderProps> = ({
     } finally {
       setSavingName(false);
     }
-  };
-
-  const handleCustomAccountSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanEmail = customEmail.trim().toLowerCase();
-    if (!cleanEmail || !cleanEmail.includes('@')) return;
-    try {
-      await onDirectGoogleSignIn(
-        cleanEmail,
-        customName.trim() || cleanEmail.split('@')[0] || 'Google User'
-      );
-    } catch {
-      // Ignore error
-    }
-    setUseCustomAccount(false);
-    setCustomEmail('');
-    setCustomName('');
   };
 
   return (
@@ -384,93 +356,17 @@ export const Header: React.FC<HeaderProps> = ({
                       </div>
                     </div>
 
-                    {!showGoogleAccountPicker ? (
-                      <button
-                        type="button"
-                        disabled={authLoading}
-                        onClick={onLogin}
-                        className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-[#FF6B00] hover:bg-[#EA580C] shadow-xs transition-colors cursor-pointer disabled:opacity-50"
-                      >
-                        <LogIn className="w-3.5 h-3.5" />
-                        <span>
-                          {authLoading ? 'Connecting Google...' : 'Continue with Google'}
-                        </span>
-                      </button>
-                    ) : (
-                      <div className="pt-2 border-t border-neutral-100 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-semibold text-neutral-700">
-                            Choose a Google Account
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onCloseGooglePicker();
-                              setUseCustomAccount(false);
-                            }}
-                            className="text-[11px] text-neutral-400 hover:text-neutral-700 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-
-                        {/* Verified Owner / Admin Google Account Option */}
-                        <button
-                          type="button"
-                          onClick={() =>
-                            onDirectGoogleSignIn('ndnilamdevi12@gmail.com', 'DecodeWithTech Admin')
-                          }
-                          className="w-full flex items-center gap-2.5 p-2.5 rounded-xl border border-orange-200 bg-orange-50/50 hover:bg-orange-100/70 text-left transition-colors cursor-pointer"
-                        >
-                          <div className="w-8 h-8 rounded-full bg-[#FF6B00] text-white flex items-center justify-center font-bold text-xs shrink-0">
-                            N
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-bold text-neutral-950 truncate">
-                              DecodeWithTech Admin
-                            </p>
-                            <p className="text-[11px] text-neutral-600 truncate">
-                              ndnilamdevi12@gmail.com
-                            </p>
-                          </div>
-                        </button>
-
-                        {!useCustomAccount ? (
-                          <button
-                            type="button"
-                            onClick={() => setUseCustomAccount(true)}
-                            className="w-full py-2 px-3 rounded-xl border border-neutral-200 hover:bg-neutral-50 text-[11px] font-semibold text-neutral-700 transition-colors cursor-pointer"
-                          >
-                            Use another Google Account
-                          </button>
-                        ) : (
-                          <form onSubmit={handleCustomAccountSubmit} className="space-y-2 pt-1">
-                            <input
-                              type="email"
-                              required
-                              value={customEmail}
-                              onChange={(e) => setCustomEmail(e.target.value)}
-                              placeholder="yourname@gmail.com"
-                              className="w-full px-3 py-2 rounded-xl border border-neutral-300 text-xs text-neutral-900 focus:outline-none focus:border-[#FF6B00]"
-                            />
-                            <input
-                              type="text"
-                              value={customName}
-                              onChange={(e) => setCustomName(e.target.value)}
-                              placeholder="Your Name (optional)"
-                              maxLength={80}
-                              className="w-full px-3 py-2 rounded-xl border border-neutral-300 text-xs text-neutral-900 focus:outline-none focus:border-[#FF6B00]"
-                            />
-                            <button
-                              type="submit"
-                              className="w-full py-2 px-3 rounded-xl bg-[#FF6B00] hover:bg-[#EA580C] text-white text-xs font-semibold cursor-pointer"
-                            >
-                              Continue with Google
-                            </button>
-                          </form>
-                        )}
-                      </div>
-                    )}
+                    <button
+                      type="button"
+                      disabled={authLoading}
+                      onClick={onLogin}
+                      className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-xs font-semibold text-white bg-[#FF6B00] hover:bg-[#EA580C] shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      <LogIn className="w-3.5 h-3.5" />
+                      <span>
+                        {authLoading ? 'Connecting Google...' : 'Continue with Google'}
+                      </span>
+                    </button>
                   </div>
                 )}
               </div>
@@ -493,7 +389,7 @@ export const Header: React.FC<HeaderProps> = ({
                   </button>
                 ))}
 
-                {/* Admin Panel Option — strictly visible ONLY when authorized Admin (ndnilamdevi12@gmail.com) is logged in */}
+                {/* Admin Panel Option — strictly visible ONLY when authorized Admin is logged in */}
                 {isAdmin && (
                   <div className="pt-3 mt-3 border-t border-neutral-100">
                     <button

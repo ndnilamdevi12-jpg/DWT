@@ -106,53 +106,16 @@ export default function App() {
     parsePathnameToRoute(window.location.pathname)
   );
 
-  // Auth & Admin Authorization State (supports Firebase Auth + Google OAuth / Menu Session)
+  // Auth & Admin Authorization State (Verified via Firebase Auth + Server-Side Firebase Admin SDK)
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [sessionUser, setSessionUser] = useState<{
-    uid: string;
-    email: string;
-    displayName: string;
-    photoURL: string | null;
-    accessToken?: string;
-  } | null>(() => {
-    try {
-      const saved = localStorage.getItem('dwt_google_session_v1');
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-  const [userDisplayName, setUserDisplayName] = useState<string>(() => {
-    try {
-      const saved = localStorage.getItem('dwt_google_session_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return parsed.displayName || '';
-      }
-    } catch {
-      // Ignore
-    }
-    return '';
-  });
-  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('dwt_google_session_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return (parsed.email || '').trim().toLowerCase() === 'ndnilamdevi12@gmail.com';
-      }
-    } catch {
-      // Ignore
-    }
-    return false;
-  });
+  const [userDisplayName, setUserDisplayName] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
-  const [showGoogleAccountPicker, setShowGoogleAccountPicker] = useState<boolean>(false);
 
-  const activeUid = currentUser?.uid || sessionUser?.uid || '';
-  const activeEmail = currentUser?.email || sessionUser?.email || null;
-  const activePhotoUrl = currentUser?.photoURL || sessionUser?.photoURL || null;
+  const activeUid = currentUser?.uid || '';
+  const activeEmail = currentUser?.email || null;
+  const activePhotoUrl = currentUser?.photoURL || null;
 
   // Content State (Initialized with owner-provided data, synced live with Firestore)
   const [settings, setSettings] = useState<SiteSettings>(INITIAL_SITE_SETTINGS);
@@ -292,7 +255,7 @@ export default function App() {
     canonical.href = window.location.origin + window.location.pathname;
   }, [route, settings.brand_name, articles]);
 
-  // Helper to sync content to persistent backend store
+  // Helper to sync content to persistent backend store using verified Firebase ID Token only
   const syncContentToServer = useCallback(
     async (partial: {
       settings?: SiteSettings;
@@ -301,105 +264,39 @@ export default function App() {
       products?: ProductItem[];
       socialLinks?: SocialLinkItem[];
     }) => {
-      const emailToVerify = (currentUser?.email || sessionUser?.email || '').trim().toLowerCase();
-      const uidToVerify = currentUser?.uid || sessionUser?.uid || '';
-      if (!emailToVerify) return;
+      if (!currentUser || !isAdmin) return;
 
       try {
-        let authHeader = '';
-        if (currentUser) {
-          const token = await currentUser.getIdToken();
-          authHeader = `Bearer ${token}`;
-        } else if (sessionUser?.accessToken) {
-          authHeader = `Bearer ${sessionUser.accessToken}`;
-        }
-
+        const token = await currentUser.getIdToken();
         await fetch('/api/content/sync', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(authHeader ? { Authorization: authHeader } : {}),
+            Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            email: emailToVerify,
-            uid: uidToVerify,
-            ...partial,
-          }),
+          body: JSON.stringify(partial),
         });
       } catch {
         // Ignore network errors
       }
     },
-    [currentUser, sessionUser]
+    [currentUser, isAdmin]
   );
 
-  // Verify saved sessionUser on mount & ensure initial data is synced to server store
+  // Verify Admin Status via Server-Side Firebase Admin SDK & Bootstrap Firestore if needed
   useEffect(() => {
-    if (!sessionUser || currentUser) return;
-    const currentSession = sessionUser;
-    let cancelled = false;
-    async function verifySavedSession() {
-      const cleanEmail = currentSession.email.trim().toLowerCase();
-      const ownerMatch = cleanEmail === 'ndnilamdevi12@gmail.com';
-      try {
-        const res = await fetch('/api/auth/verify-admin', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(currentSession.accessToken
-              ? { Authorization: `Bearer ${currentSession.accessToken}` }
-              : {}),
-          },
-          body: JSON.stringify({ email: cleanEmail, uid: currentSession.uid }),
-        });
-        if (res.ok && !cancelled) {
-          const data = (await res.json()) as { isAdmin?: boolean; displayName?: string | null };
-          const adminVerified = Boolean(data.isAdmin || ownerMatch);
-          setIsAdmin(adminVerified);
-          if (data.displayName) {
-            setUserDisplayName(data.displayName);
-          }
-          if (adminVerified) {
-            const storeRes = await fetch('/api/content');
-            if (storeRes.ok) {
-              const store = await storeRes.json();
-              if (!store.settings) {
-                await fetch('/api/content/sync', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    email: cleanEmail,
-                    uid: currentSession.uid,
-                    settings: INITIAL_SITE_SETTINGS,
-                    videos: INITIAL_VIDEOS,
-                    articles: INITIAL_ARTICLES,
-                    products: INITIAL_PRODUCTS,
-                    socialLinks: INITIAL_SOCIAL_LINKS,
-                  }),
-                });
-              }
-            }
-          }
-        }
-      } catch {
-        if (!cancelled) setIsAdmin(ownerMatch);
-      }
+    try {
+      // Clean up any legacy client-side session storage key
+      localStorage.removeItem('dwt_google_session_v1');
+    } catch {
+      // Ignore storage restrictions
     }
-    verifySavedSession();
-    return () => {
-      cancelled = true;
-    };
-  }, [sessionUser, currentUser]);
 
-  // Verify Admin Status via Server-Side Secret Allowlist & Bootstrap Firestore if needed
-  useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       if (!user) {
-        if (!sessionUser) {
-          setIsAdmin(false);
-          setUserDisplayName('');
-        }
+        setIsAdmin(false);
+        setUserDisplayName('');
         return;
       }
 
@@ -409,20 +306,6 @@ export default function App() {
         'Google User'
       );
       setUserDisplayName(fallbackName);
-
-      // Save to session storage for seamless reload
-      const nextSession = {
-        uid: user.uid,
-        email: user.email || '',
-        displayName: fallbackName,
-        photoURL: user.photoURL || null,
-      };
-      setSessionUser(nextSession);
-      try {
-        localStorage.setItem('dwt_google_session_v1', JSON.stringify(nextSession));
-      } catch {
-        // Ignore
-      }
 
       // Sync editable display name from /user_profiles/{uid}
       const userProfileRef = doc(db, 'user_profiles', user.uid);
@@ -449,37 +332,55 @@ export default function App() {
         }
       }
 
-      const isOwnerEmail = Boolean(
-        user.emailVerified && (user.email || '').trim().toLowerCase() === 'ndnilamdevi12@gmail.com'
-      );
-
       try {
-        let serverVerified = false;
-        try {
-          const token = await user.getIdToken();
-          const res = await fetch('/api/auth/verify-admin', {
-            method: 'POST',
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ email: user.email, uid: user.uid }),
-          });
-          if (res.ok) {
-            const data = (await res.json()) as { isAdmin?: boolean; displayName?: string | null };
-            serverVerified = Boolean(data.isAdmin);
-            if (data.displayName) {
-              setUserDisplayName(data.displayName);
-            }
+        const token = await user.getIdToken();
+        const res = await fetch('/api/auth/verify-admin', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+
+        let verifiedAdmin = false;
+        if (res.ok) {
+          const data = (await res.json()) as { isAdmin?: boolean; displayName?: string | null };
+          verifiedAdmin = data.isAdmin === true;
+          if (data.displayName) {
+            setUserDisplayName(clampStr(data.displayName, 80, fallbackName));
           }
-        } catch {
-          // Fallback to verified owner check
         }
 
-        const verifiedAdmin = Boolean(serverVerified || isOwnerEmail);
         setIsAdmin(verifiedAdmin);
 
         if (verifiedAdmin) {
+          // Ensure server store is seeded if empty
+          try {
+            const storeRes = await fetch('/api/content');
+            if (storeRes.ok) {
+              const store = await storeRes.json();
+              if (!store.settings) {
+                await fetch('/api/content/sync', {
+                  method: 'POST',
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify({
+                    settings: INITIAL_SITE_SETTINGS,
+                    videos: INITIAL_VIDEOS,
+                    articles: INITIAL_ARTICLES,
+                    products: INITIAL_PRODUCTS,
+                    socialLinks: INITIAL_SOCIAL_LINKS,
+                  }),
+                });
+              }
+            }
+          } catch {
+            // Ignore
+          }
+
           // Ensure /admins/{uid} exists
           const adminDocRef = doc(db, 'admins', user.uid);
           try {
@@ -603,12 +504,11 @@ export default function App() {
           }
         }
       } catch {
-        setIsAdmin(isOwnerEmail);
+        setIsAdmin(false);
       }
     });
 
     return () => unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Subscribe to Firestore Content (Public Published Queries + Admin Author Queries)
@@ -841,86 +741,20 @@ export default function App() {
     [socialLinks]
   );
 
-  // Auth Actions: Multi-Layer Google Login (Firebase Auth -> Google OAuth GSI -> Menu Account Chooser)
-  const handleDirectGoogleSignIn = async (rawEmail: string, rawName?: string, photoURL?: string | null, accessToken?: string) => {
-    const cleanEmail = rawEmail.trim().toLowerCase();
-    if (!cleanEmail) return;
-    const uid = `google_${cleanEmail.replace(/[^a-z0-9]/g, '_')}`;
-    const defaultName = clampStr(
-      rawName || cleanEmail.split('@')[0] || 'Google User',
-      80,
-      'Google User'
-    );
-
+  // Auth Actions: Firebase Google Authentication
+  const handleGoogleLogin = async () => {
     setAuthLoading(true);
     setAuthNotice(null);
     try {
-      const res = await fetch('/api/auth/verify-admin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-        },
-        body: JSON.stringify({ email: cleanEmail, uid }),
-      });
-
-      let verifiedAdmin = cleanEmail === 'ndnilamdevi12@gmail.com';
-      let savedDisplayName = defaultName;
-
-      if (res.ok) {
-        const data = (await res.json()) as { isAdmin?: boolean; displayName?: string | null };
-        verifiedAdmin = Boolean(data.isAdmin || verifiedAdmin);
-        if (data.displayName) {
-          savedDisplayName = clampStr(data.displayName, 80, defaultName);
-        }
-      }
-
-      const nextSession = {
-        uid,
-        email: cleanEmail,
-        displayName: savedDisplayName,
-        photoURL: photoURL || null,
-        accessToken,
-      };
-      setSessionUser(nextSession);
-      setUserDisplayName(savedDisplayName);
-      setIsAdmin(verifiedAdmin);
-      setShowGoogleAccountPicker(false);
-
-      try {
-        localStorage.setItem('dwt_google_session_v1', JSON.stringify(nextSession));
-      } catch {
-        // Ignore storage errors
-      }
-
-      // Ensure initial content is persisted on server when admin logs in
-      if (verifiedAdmin) {
-        await fetch('/api/content/sync', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-          },
-          body: JSON.stringify({
-            email: cleanEmail,
-            uid,
-            settings,
-            videos,
-            articles,
-            products,
-            socialLinks,
-          }),
-        });
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (!msg.includes('popup-closed-by-user')) {
+        setAuthNotice('Google Sign-In could not be completed. Please allow popups and try again.');
       }
     } finally {
       setAuthLoading(false);
     }
-  };
-
-  const handleGoogleLogin = async () => {
-    setAuthNotice(null);
-    // Open the inline Google Account Chooser inside the Menu immediately for a zero-error experience in the preview iframe
-    setShowGoogleAccountPicker(true);
   };
 
   const handleLogout = async () => {
@@ -930,10 +764,8 @@ export default function App() {
       // Ignore
     }
     setCurrentUser(null);
-    setSessionUser(null);
     setUserDisplayName('');
     setIsAdmin(false);
-    setShowGoogleAccountPicker(false);
     try {
       localStorage.removeItem('dwt_google_session_v1');
     } catch {
@@ -945,27 +777,19 @@ export default function App() {
   };
 
   const handleUpdateDisplayName = async (rawName: string) => {
+    if (!currentUser) return;
     const cleanName = clampStr(rawName, 80, 'Google User');
     setUserDisplayName(cleanName);
 
-    // Update persistent session & backend profile store
-    if (sessionUser) {
-      const updatedSession = { ...sessionUser, displayName: cleanName };
-      setSessionUser(updatedSession);
-      try {
-        localStorage.setItem('dwt_google_session_v1', JSON.stringify(updatedSession));
-      } catch {
-        // Ignore
-      }
-    }
-
     try {
+      const token = await currentUser.getIdToken();
       await fetch('/api/profile/update', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify({
-          email: activeEmail,
-          uid: activeUid,
           displayName: cleanName,
         }),
       });
@@ -973,46 +797,44 @@ export default function App() {
       // Ignore
     }
 
-    // Also update Firebase Auth & Firestore /user_profiles/{uid} if Firebase Auth is active
-    if (currentUser) {
-      try {
-        await updateProfile(currentUser, { displayName: cleanName });
-      } catch {
-        // Ignore
-      }
+    // Also update Firebase Auth & Firestore /user_profiles/{uid}
+    try {
+      await updateProfile(currentUser, { displayName: cleanName });
+    } catch {
+      // Ignore
+    }
 
-      const userProfileRef = doc(db, 'user_profiles', currentUser.uid);
+    const userProfileRef = doc(db, 'user_profiles', currentUser.uid);
+    try {
+      const existingSnap = await getDoc(userProfileRef);
+      if (existingSnap.exists()) {
+        await updateDoc(userProfileRef, {
+          displayName: cleanName,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        await setDoc(userProfileRef, {
+          uid: currentUser.uid,
+          displayName: cleanName,
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
+    } catch (err) {
       try {
-        const existingSnap = await getDoc(userProfileRef);
-        if (existingSnap.exists()) {
-          await updateDoc(userProfileRef, {
-            displayName: cleanName,
-            updatedAt: serverTimestamp(),
-          });
-        } else {
-          await setDoc(userProfileRef, {
-            uid: currentUser.uid,
-            displayName: cleanName,
-            createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
-          });
-        }
-      } catch (err) {
-        try {
-          handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${currentUser.uid}`);
-        } catch {
-          // Handled
-        }
+        handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${currentUser.uid}`);
+      } catch {
+        // Handled
       }
     }
   };
 
-  // Admin CRUD Handlers (Updates Live State + Server Store + Firestore when authenticated)
+  // Admin CRUD Handlers (Updates Live State + Server Store + Firestore when authenticated as Admin)
   const handleSaveVideo = async (
     item: Omit<VideoItem, 'id' | 'createdAt' | 'updatedAt'>,
     existingId?: string
   ) => {
-    if (!activeUid) return;
+    if (!currentUser || !isAdmin || !activeUid) return;
     const id = existingId || `video_${Date.now()}`;
     const payload = sanitizeVideoPayload({ ...item, authorId: activeUid });
 
@@ -1056,6 +878,7 @@ export default function App() {
   };
 
   const handleDeleteVideo = async (id: string) => {
+    if (!currentUser || !isAdmin) return;
     const nextList = videos.filter((v) => v.id !== id);
     setVideos(nextList);
     await syncContentToServer({ videos: nextList });
@@ -1077,7 +900,7 @@ export default function App() {
     item: Omit<ArticleItem, 'id' | 'createdAt' | 'updatedAt'>,
     existingId?: string
   ) => {
-    if (!activeUid) return;
+    if (!currentUser || !isAdmin || !activeUid) return;
     const id = existingId || `article_${Date.now()}`;
     const payload = sanitizeArticlePayload({ ...item, authorId: activeUid });
 
@@ -1121,6 +944,7 @@ export default function App() {
   };
 
   const handleDeleteArticle = async (id: string) => {
+    if (!currentUser || !isAdmin) return;
     const nextList = articles.filter((a) => a.id !== id);
     setArticles(nextList);
     await syncContentToServer({ articles: nextList });
@@ -1142,7 +966,7 @@ export default function App() {
     item: Omit<ProductItem, 'id' | 'createdAt' | 'updatedAt'>,
     existingId?: string
   ) => {
-    if (!activeUid) return;
+    if (!currentUser || !isAdmin || !activeUid) return;
     const id = existingId || `product_${Date.now()}`;
     const payload = sanitizeProductPayload({ ...item, authorId: activeUid });
 
@@ -1186,6 +1010,7 @@ export default function App() {
   };
 
   const handleDeleteProduct = async (id: string) => {
+    if (!currentUser || !isAdmin) return;
     const nextList = products.filter((p) => p.id !== id);
     setProducts(nextList);
     await syncContentToServer({ products: nextList });
@@ -1207,7 +1032,7 @@ export default function App() {
     item: Omit<SocialLinkItem, 'id' | 'createdAt' | 'updatedAt'>,
     existingId?: string
   ) => {
-    if (!activeUid) return;
+    if (!currentUser || !isAdmin || !activeUid) return;
     const id = existingId || `social_${Date.now()}`;
     const payload = sanitizeSocialPayload({ ...item, authorId: activeUid });
 
@@ -1255,6 +1080,7 @@ export default function App() {
   };
 
   const handleDeleteSocial = async (id: string) => {
+    if (!currentUser || !isAdmin) return;
     const nextList = socialLinks.filter((s) => s.id !== id);
     setSocialLinks(nextList);
     await syncContentToServer({ socialLinks: nextList });
@@ -1273,7 +1099,7 @@ export default function App() {
   };
 
   const handleSaveSettings = async (next: Omit<SiteSettings, 'createdAt' | 'updatedAt'>) => {
-    if (!activeUid) return;
+    if (!currentUser || !isAdmin || !activeUid) return;
     const cleanPayload: SiteSettings = {
       logo_svg: clampStr(next.logo_svg, SCHEMA_LIMITS.SETTINGS.LOGO_MAX, INITIAL_SITE_SETTINGS.logo_svg),
       brand_name: clampStr(next.brand_name, SCHEMA_LIMITS.SETTINGS.BRAND_MAX, 'DecodeWithTech'),
@@ -1368,17 +1194,13 @@ export default function App() {
         userDisplayName={
           userDisplayName ||
           currentUser?.displayName ||
-          sessionUser?.displayName ||
           activeEmail?.split('@')[0] ||
           'Google User'
         }
         userPhotoUrl={activePhotoUrl}
         isAdmin={isAdmin}
         authLoading={authLoading}
-        showGoogleAccountPicker={showGoogleAccountPicker}
         onLogin={handleGoogleLogin}
-        onDirectGoogleSignIn={handleDirectGoogleSignIn}
-        onCloseGooglePicker={() => setShowGoogleAccountPicker(false)}
         onLogout={handleLogout}
         onUpdateDisplayName={handleUpdateDisplayName}
       />
@@ -2003,15 +1825,16 @@ export default function App() {
                 Admin Authorization Required
               </h1>
               <p className="mt-2 text-sm text-neutral-600">
-                Sign in with the authorized DecodeWithTech administrator Google account (ndnilamdevi12@gmail.com) to access the CMS dashboard.
+                Sign in with an authorized DecodeWithTech administrator Google account to access the CMS dashboard.
               </p>
               <div className="mt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
                 <button
                   type="button"
-                  onClick={() => handleDirectGoogleSignIn('ndnilamdevi12@gmail.com', 'DecodeWithTech Admin')}
-                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-[#FF6B00] hover:bg-[#EA580C] text-white text-xs sm:text-sm font-semibold cursor-pointer"
+                  onClick={handleGoogleLogin}
+                  disabled={authLoading}
+                  className="w-full sm:w-auto px-5 py-3 rounded-xl bg-[#FF6B00] hover:bg-[#EA580C] text-white text-xs sm:text-sm font-semibold cursor-pointer disabled:opacity-50"
                 >
-                  Continue as Admin (ndnilamdevi12@gmail.com)
+                  {authLoading ? 'Connecting Google...' : 'Sign in with Google'}
                 </button>
                 <button
                   type="button"
