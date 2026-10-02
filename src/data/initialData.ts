@@ -14,6 +14,17 @@ import dwtMascotLogoImg from '../assets/images/dwt_official_logo_1790895204064.j
 
 export const DWT_MASCOT_LOGO_URL = dwtMascotLogoImg;
 
+export function resolveAssetUrl(rawUrl: string | undefined | null, fallback = ''): string {
+  const trimmed = (rawUrl || '').trim();
+  if (!trimmed) return fallback;
+  if (trimmed.includes('article_mobile_tower')) return mobileTowerImg;
+  if (trimmed.includes('article_qr_optical')) return qrOpticalImg;
+  if (trimmed.includes('product_creator_mic')) return creatorMicImg;
+  if (trimmed.includes('product_tech_adapter')) return techAdapterImg;
+  if (trimmed.includes('dwt_official_logo')) return dwtMascotLogoImg;
+  return trimmed;
+}
+
 export const DEFAULT_DWT_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none">
   <defs>
     <clipPath id="dwtLogoClip">

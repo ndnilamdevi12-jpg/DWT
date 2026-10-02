@@ -9,6 +9,7 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import { ArticleItem } from '../types';
+import { resolveAssetUrl } from '../data/initialData';
 
 interface ArticleViewProps {
   article: ArticleItem;
@@ -118,13 +119,21 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
   useEffect(() => {
     return () => {
       if (synthTimerRef.current) {
-        window.clearInterval(synthTimerRef.current);
+        window.clearTimeout(synthTimerRef.current);
       }
-      if ('speechSynthesis' in window) {
-        window.speechSynthesis.cancel();
+      try {
+        if ('speechSynthesis' in window && window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+        }
+      } catch {
+        // Ignore speechSynthesis cleanup errors
       }
       if (htmlAudioRef.current) {
-        htmlAudioRef.current.pause();
+        try {
+          htmlAudioRef.current.pause();
+        } catch {
+          // Ignore audio pause errors
+        }
       }
     };
   }, [article.id]);
@@ -144,15 +153,15 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
 
     const text = speechChunks[index];
 
-    if ('speechSynthesis' in window) {
+    if ('speechSynthesis' in window && window.speechSynthesis && typeof SpeechSynthesisUtterance !== 'undefined') {
       try {
         window.speechSynthesis.cancel();
         const utterance = new SpeechSynthesisUtterance(text);
-        const voices = window.speechSynthesis.getVoices();
+        const voices = window.speechSynthesis.getVoices() || [];
         const englishVoice =
-          voices.find((v) => v.lang.toLowerCase().startsWith('en-us')) ||
-          voices.find((v) => v.lang.toLowerCase().startsWith('en-in')) ||
-          voices.find((v) => v.lang.toLowerCase().startsWith('en'));
+          voices.find((v) => (v.lang || '').toLowerCase().startsWith('en-us')) ||
+          voices.find((v) => (v.lang || '').toLowerCase().startsWith('en-in')) ||
+          voices.find((v) => (v.lang || '').toLowerCase().startsWith('en'));
         if (englishVoice) {
           utterance.voice = englishVoice;
           utterance.lang = englishVoice.lang;
@@ -185,16 +194,22 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
 
   const handlePlayOrResume = () => {
     if (hasUploadedAudio && htmlAudioRef.current) {
-      htmlAudioRef.current.play();
+      htmlAudioRef.current.play().catch(() => {
+        // Ignore autoplay restrictions
+      });
       setPlayState('playing');
       return;
     }
 
     if (playState === 'paused') {
-      if ('speechSynthesis' in window && window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setPlayState('playing');
-        return;
+      try {
+        if ('speechSynthesis' in window && window.speechSynthesis?.paused) {
+          window.speechSynthesis.resume();
+          setPlayState('playing');
+          return;
+        }
+      } catch {
+        // Fallback to speakChunkAt
       }
       setPlayState('playing');
       speakChunkAt(activeChunkIndex);
@@ -208,7 +223,11 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
 
   const handlePause = () => {
     if (hasUploadedAudio && htmlAudioRef.current) {
-      htmlAudioRef.current.pause();
+      try {
+        htmlAudioRef.current.pause();
+      } catch {
+        // Ignore
+      }
       setPlayState('paused');
       return;
     }
@@ -216,22 +235,34 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
     if (synthTimerRef.current) {
       window.clearTimeout(synthTimerRef.current);
     }
-    if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
-      window.speechSynthesis.pause();
+    try {
+      if ('speechSynthesis' in window && window.speechSynthesis?.speaking) {
+        window.speechSynthesis.pause();
+      }
+    } catch {
+      // Ignore
     }
     setPlayState('paused');
   };
 
   const handleStop = () => {
     if (hasUploadedAudio && htmlAudioRef.current) {
-      htmlAudioRef.current.pause();
-      htmlAudioRef.current.currentTime = 0;
+      try {
+        htmlAudioRef.current.pause();
+        htmlAudioRef.current.currentTime = 0;
+      } catch {
+        // Ignore
+      }
     }
     if (synthTimerRef.current) {
       window.clearTimeout(synthTimerRef.current);
     }
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+    try {
+      if ('speechSynthesis' in window && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    } catch {
+      // Ignore
     }
     setPlayState('idle');
     setProgressPct(0);
@@ -303,7 +334,7 @@ export const ArticleView: React.FC<ArticleViewProps> = ({ article, onBack }) => 
       <div className="relative w-full aspect-video rounded-3xl overflow-hidden bg-orange-50 border border-orange-500/20 shadow-[0_12px_36px_rgba(249,115,22,0.08)] mb-8">
         {!imgFailed && article.thumbnail ? (
           <img
-            src={article.thumbnail}
+            src={resolveAssetUrl(article.thumbnail)}
             alt={article.title}
             referrerPolicy="no-referrer"
             onError={() => setImgFailed(true)}

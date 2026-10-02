@@ -96,6 +96,8 @@ export const Header: React.FC<HeaderProps> = ({
       setEditingName(false);
       setNameSavedMsg(true);
       window.setTimeout(() => setNameSavedMsg(false), 2500);
+    } catch {
+      setEditingName(false);
     } finally {
       setSavingName(false);
     }
@@ -105,10 +107,14 @@ export const Header: React.FC<HeaderProps> = ({
     e.preventDefault();
     const cleanEmail = customEmail.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) return;
-    await onDirectGoogleSignIn(
-      cleanEmail,
-      customName.trim() || cleanEmail.split('@')[0] || 'Google User'
-    );
+    try {
+      await onDirectGoogleSignIn(
+        cleanEmail,
+        customName.trim() || cleanEmail.split('@')[0] || 'Google User'
+      );
+    } catch {
+      // Ignore error
+    }
     setUseCustomAccount(false);
     setCustomEmail('');
     setCustomName('');

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { DwtLogo } from './DwtLogo';
 
 interface IntroScreenProps {
@@ -29,6 +29,8 @@ interface ParticleConfig {
  */
 export const IntroScreen: React.FC<IntroScreenProps> = ({ logoSvg, onComplete }) => {
   const [elapsedMs, setElapsedMs] = useState(0);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
   const particles = useMemo<ParticleConfig[]>(() => {
     const shapes: ParticleConfig['shape'][] = ['circle', 'diamond', 'ring', 'node'];
@@ -51,14 +53,21 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ logoSvg, onComplete })
   }, []);
 
   useEffect(() => {
-    const start = performance.now();
+    const start = Date.now();
     let rafId: number;
+    let finished = false;
 
-    const tick = (now: number) => {
-      const diff = now - start;
+    const completeOnce = () => {
+      if (finished) return;
+      finished = true;
+      onCompleteRef.current();
+    };
+
+    const tick = () => {
+      const diff = Date.now() - start;
       if (diff >= 5000) {
         setElapsedMs(5000);
-        onComplete();
+        completeOnce();
         return;
       }
       setElapsedMs(diff);
@@ -66,8 +75,13 @@ export const IntroScreen: React.FC<IntroScreenProps> = ({ logoSvg, onComplete })
     };
 
     rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
-  }, [onComplete]);
+    const fallbackTimer = window.setTimeout(completeOnce, 5050);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(fallbackTimer);
+    };
+  }, []);
 
   const sec = elapsedMs / 1000;
 

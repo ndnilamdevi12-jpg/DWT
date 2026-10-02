@@ -48,6 +48,7 @@ import {
   INITIAL_SITE_SETTINGS,
   INITIAL_SOCIAL_LINKS,
   INITIAL_VIDEOS,
+  resolveAssetUrl,
   sanitizeArticlePayload,
   sanitizeProductPayload,
   sanitizeSocialPayload,
@@ -167,10 +168,14 @@ export default function App() {
   const navigate = useCallback((nextRoute: PageRoute) => {
     setRoute(nextRoute);
     const nextPath = routeToPathname(nextRoute);
-    if (window.location.pathname !== nextPath) {
-      window.history.pushState({}, '', nextPath);
+    try {
+      if (window.location.pathname !== nextPath) {
+        window.history.pushState({}, '', nextPath);
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    } catch {
+      // Ignore navigation history restrictions
     }
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   }, []);
 
   useEffect(() => {
@@ -201,13 +206,28 @@ export default function App() {
               setVideos(storeData.videos);
             }
             if (Array.isArray(storeData.articles) && storeData.articles.length > 0) {
-              setArticles(storeData.articles);
+              setArticles(
+                storeData.articles.map((a) => ({
+                  ...a,
+                  thumbnail: resolveAssetUrl(a.thumbnail, a.thumbnail),
+                }))
+              );
             }
             if (Array.isArray(storeData.products) && storeData.products.length > 0) {
-              setProducts(storeData.products);
+              setProducts(
+                storeData.products.map((p) => ({
+                  ...p,
+                  image: resolveAssetUrl(p.image, p.image),
+                }))
+              );
             }
             if (Array.isArray(storeData.socialLinks) && storeData.socialLinks.length > 0) {
-              setSocialLinks(storeData.socialLinks);
+              setSocialLinks(
+                storeData.socialLinks.map((s) => ({
+                  ...s,
+                  custom_image: resolveAssetUrl(s.custom_image, s.custom_image),
+                }))
+              );
             }
           }
         }
@@ -422,7 +442,11 @@ export default function App() {
           });
         }
       } catch (err) {
-        handleFirestoreError(err, OperationType.GET, `user_profiles/${user.uid}`);
+        try {
+          handleFirestoreError(err, OperationType.GET, `user_profiles/${user.uid}`);
+        } catch {
+          // Handled
+        }
       }
 
       const isOwnerEmail = Boolean(
@@ -469,7 +493,11 @@ export default function App() {
               });
             }
           } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, `admins/${user.uid}`);
+            try {
+              handleFirestoreError(err, OperationType.WRITE, `admins/${user.uid}`);
+            } catch {
+              // Handled
+            }
           }
 
           // Seed initial owner data into Firestore if site_settings/main does not exist yet
@@ -567,7 +595,11 @@ export default function App() {
               }
             }
           } catch (err) {
-            handleFirestoreError(err, OperationType.WRITE, 'site_settings/main');
+            try {
+              handleFirestoreError(err, OperationType.WRITE, 'site_settings/main');
+            } catch {
+              // Handled
+            }
           }
         }
       } catch {
@@ -609,7 +641,13 @@ export default function App() {
           setHasFirestoreSeeded(true);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.GET, 'site_settings/main')
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.GET, 'site_settings/main');
+        } catch {
+          // Handled
+        }
+      }
     );
 
     const videoQuery =
@@ -620,7 +658,7 @@ export default function App() {
     const unsubVideos = onSnapshot(
       videoQuery,
       (snap) => {
-        if (!snap.empty || hasFirestoreSeeded) {
+        if (!snap.empty) {
           const list = snap.docs
             .map((d) => {
               const data = d.data() as Omit<VideoItem, 'id'>;
@@ -637,7 +675,13 @@ export default function App() {
           setVideos(list);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'videos')
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, 'videos');
+        } catch {
+          // Handled
+        }
+      }
     );
 
     const articleQuery =
@@ -648,7 +692,7 @@ export default function App() {
     const unsubArticles = onSnapshot(
       articleQuery,
       (snap) => {
-        if (!snap.empty || hasFirestoreSeeded) {
+        if (!snap.empty) {
           const list = snap.docs
             .map((d) => {
               const data = d.data() as Omit<ArticleItem, 'id'>;
@@ -663,13 +707,23 @@ export default function App() {
                   authorId: data.authorId,
                 };
               }
-              return { id: d.id, ...data };
+              return {
+                id: d.id,
+                ...data,
+                thumbnail: resolveAssetUrl(data.thumbnail, fallbackSeed?.thumbnail || data.thumbnail),
+              };
             })
             .sort((a, b) => a.display_order - b.display_order);
           setArticles(list);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'articles')
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, 'articles');
+        } catch {
+          // Handled
+        }
+      }
     );
 
     const productQuery =
@@ -680,7 +734,7 @@ export default function App() {
     const unsubProducts = onSnapshot(
       productQuery,
       (snap) => {
-        if (!snap.empty || hasFirestoreSeeded) {
+        if (!snap.empty) {
           const list = snap.docs
             .map((d) => {
               const data = d.data() as Omit<ProductItem, 'id'>;
@@ -689,6 +743,7 @@ export default function App() {
               return {
                 id: d.id,
                 ...data,
+                image: resolveAssetUrl(data.image, fallbackSeed?.image || data.image),
                 description:
                   hasHindiDesc && fallbackSeed ? fallbackSeed.description : data.description,
               };
@@ -697,7 +752,13 @@ export default function App() {
           setProducts(list);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'products')
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, 'products');
+        } catch {
+          // Handled
+        }
+      }
     );
 
     const socialQuery =
@@ -708,7 +769,7 @@ export default function App() {
     const unsubSocial = onSnapshot(
       socialQuery,
       (snap) => {
-        if (!snap.empty || hasFirestoreSeeded) {
+        if (!snap.empty) {
           const list = snap.docs
             .map((d) => {
               const data = d.data() as Omit<SocialLinkItem, 'id'>;
@@ -717,7 +778,10 @@ export default function App() {
               return {
                 id: d.id,
                 ...data,
-                custom_image: data.custom_image || fallbackSeed?.custom_image || '',
+                custom_image: resolveAssetUrl(
+                  data.custom_image || fallbackSeed?.custom_image || '',
+                  fallbackSeed?.custom_image || ''
+                ),
                 description:
                   hasHindiDesc && fallbackSeed ? fallbackSeed.description : data.description,
               };
@@ -726,7 +790,13 @@ export default function App() {
           setSocialLinks(list);
         }
       },
-      (err) => handleFirestoreError(err, OperationType.LIST, 'social_links')
+      (err) => {
+        try {
+          handleFirestoreError(err, OperationType.LIST, 'social_links');
+        } catch {
+          // Handled
+        }
+      }
     );
 
     return () => {
@@ -928,7 +998,11 @@ export default function App() {
           });
         }
       } catch (err) {
-        handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${currentUser.uid}`);
+        try {
+          handleFirestoreError(err, OperationType.UPDATE, `user_profiles/${currentUser.uid}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -972,7 +1046,11 @@ export default function App() {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `videos/${id}`);
+        try {
+          handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `videos/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -986,7 +1064,11 @@ export default function App() {
       try {
         await deleteDoc(doc(db, 'videos', id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `videos/${id}`);
+        try {
+          handleFirestoreError(err, OperationType.DELETE, `videos/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1029,7 +1111,11 @@ export default function App() {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `articles/${id}`);
+        try {
+          handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `articles/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1043,7 +1129,11 @@ export default function App() {
       try {
         await deleteDoc(doc(db, 'articles', id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `articles/${id}`);
+        try {
+          handleFirestoreError(err, OperationType.DELETE, `articles/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1086,7 +1176,11 @@ export default function App() {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `products/${id}`);
+        try {
+          handleFirestoreError(err, existingId ? OperationType.UPDATE : OperationType.CREATE, `products/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1100,7 +1194,11 @@ export default function App() {
       try {
         await deleteDoc(doc(db, 'products', id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
+        try {
+          handleFirestoreError(err, OperationType.DELETE, `products/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1143,11 +1241,15 @@ export default function App() {
           updatedAt: serverTimestamp(),
         });
       } catch (err) {
-        handleFirestoreError(
-          err,
-          existingId ? OperationType.UPDATE : OperationType.CREATE,
-          `social_links/${id}`
-        );
+        try {
+          handleFirestoreError(
+            err,
+            existingId ? OperationType.UPDATE : OperationType.CREATE,
+            `social_links/${id}`
+          );
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1161,7 +1263,11 @@ export default function App() {
       try {
         await deleteDoc(doc(db, 'social_links', id));
       } catch (err) {
-        handleFirestoreError(err, OperationType.DELETE, `social_links/${id}`);
+        try {
+          handleFirestoreError(err, OperationType.DELETE, `social_links/${id}`);
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1220,7 +1326,11 @@ export default function App() {
           });
         }
       } catch (err) {
-        handleFirestoreError(err, OperationType.WRITE, 'site_settings/main');
+        try {
+          handleFirestoreError(err, OperationType.WRITE, 'site_settings/main');
+        } catch {
+          // Handled
+        }
       }
     }
   };
@@ -1349,7 +1459,7 @@ export default function App() {
                       <div className="flex items-center gap-4">
                         {social.custom_image ? (
                           <img
-                            src={social.custom_image}
+                            src={resolveAssetUrl(social.custom_image, social.custom_image)}
                             alt={social.display_name}
                             referrerPolicy="no-referrer"
                             className="w-16 h-16 rounded-2xl object-cover border border-orange-200 shrink-0"
@@ -1440,7 +1550,7 @@ export default function App() {
                       <div>
                         <div className="relative aspect-[4/3] bg-neutral-50 overflow-hidden border-b border-neutral-100">
                           <img
-                            src={product.image}
+                            src={resolveAssetUrl(product.image, product.image)}
                             alt={product.name}
                             referrerPolicy="no-referrer"
                             loading="lazy"
@@ -1521,7 +1631,7 @@ export default function App() {
                       <div>
                         <div className="relative aspect-video bg-orange-50 overflow-hidden border-b border-neutral-100">
                           <img
-                            src={article.thumbnail}
+                            src={resolveAssetUrl(article.thumbnail, article.thumbnail)}
                             alt={article.title}
                             referrerPolicy="no-referrer"
                             loading="lazy"
@@ -1677,7 +1787,7 @@ export default function App() {
                     <div>
                       <div className="relative aspect-video bg-orange-50 overflow-hidden border-b border-neutral-100">
                         <img
-                          src={article.thumbnail}
+                          src={resolveAssetUrl(article.thumbnail, article.thumbnail)}
                           alt={article.title}
                           referrerPolicy="no-referrer"
                           loading="lazy"
@@ -1753,7 +1863,7 @@ export default function App() {
                       <div>
                         <div className="relative aspect-[4/3] bg-neutral-50 overflow-hidden border-b border-neutral-100">
                           <img
-                            src={product.image}
+                            src={resolveAssetUrl(product.image, product.image)}
                             alt={product.name}
                             referrerPolicy="no-referrer"
                             loading="lazy"

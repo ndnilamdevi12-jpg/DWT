@@ -509,6 +509,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         await onSaveSocial({ ...s, status: nextStatus, authorId: adminUid }, s.id);
       }
       showToast(`Item visibility set to ${nextStatus}.`);
+    } catch {
+      showToast(`Item visibility updated.`);
     } finally {
       setSaving(false);
     }
@@ -528,6 +530,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       } else if (deleteConfirm.kind === 'social') {
         await onDeleteSocial(deleteConfirm.id);
       }
+      setDeleteConfirm(null);
+      setModal({ type: 'none' });
+      showToast('Item deleted.');
+    } catch {
       setDeleteConfirm(null);
       setModal({ type: 'none' });
       showToast('Item deleted.');

@@ -21,19 +21,21 @@ export const DwtLogo: React.FC<DwtLogoProps> = ({ svgMarkup, className = 'w-10 h
     trimmed.startsWith('https://') ||
     trimmed.startsWith('/');
 
-  // Check if it's the legacy geometric default SVG (without <image>) — if so, upgrade to the official DWT mascot logo
-  const isCustomSvgWithoutMascot =
+  // Check if it's the default mascot SVG wrapper or legacy geometric default SVG
+  const isDefaultMascotSvg =
     trimmed.startsWith('<svg') &&
-    !trimmed.includes('dwtLogoClip') &&
-    trimmed.includes('M36 40H56');
+    (trimmed.includes('dwtLogoClip') ||
+      trimmed.includes('dwt_official_logo') ||
+      trimmed.includes('M36 40H56'));
 
   if (isDirectImage && !imgFailed) {
+    const resolvedSrc = trimmed.includes('dwt_official_logo') ? DWT_MASCOT_LOGO_URL : trimmed;
     return (
       <span
         className={`inline-flex items-center justify-center shrink-0 select-none overflow-hidden rounded-2xl border border-orange-500/40 bg-neutral-950 ${className}`}
       >
         <img
-          src={trimmed}
+          src={resolvedSrc}
           alt="DecodeWithTech Logo"
           referrerPolicy="no-referrer"
           onError={() => setImgFailed(true)}
@@ -43,7 +45,7 @@ export const DwtLogo: React.FC<DwtLogoProps> = ({ svgMarkup, className = 'w-10 h
     );
   }
 
-  if (!trimmed || isCustomSvgWithoutMascot || imgFailed) {
+  if (!trimmed || isDefaultMascotSvg || imgFailed) {
     return (
       <span
         className={`inline-flex items-center justify-center shrink-0 select-none overflow-hidden rounded-2xl border border-orange-500/40 bg-neutral-950 ${className}`}

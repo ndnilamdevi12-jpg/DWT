@@ -2,7 +2,6 @@ import express from 'express';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -23,20 +22,11 @@ const ADMIN_ALLOWLIST = new Set([
 const DATA_DIR = path.join(process.cwd(), 'data');
 const STORE_PATH = path.join(DATA_DIR, 'dwt_store.json');
 
-interface ServerStoreData {
-  settings: Record<string, unknown> | null;
-  videos: Record<string, unknown>[] | null;
-  articles: Record<string, unknown>[] | null;
-  products: Record<string, unknown>[] | null;
-  socialLinks: Record<string, unknown>[] | null;
-  profiles: Record<string, { displayName: string; updatedAt: string }>;
-}
-
-function readServerStore(): ServerStoreData {
+function readServerStore() {
   try {
     if (fs.existsSync(STORE_PATH)) {
       const raw = fs.readFileSync(STORE_PATH, 'utf8');
-      const parsed = JSON.parse(raw) as Partial<ServerStoreData>;
+      const parsed = JSON.parse(raw) || {};
       return {
         settings: parsed.settings || null,
         videos: Array.isArray(parsed.videos) ? parsed.videos : null,
@@ -59,7 +49,7 @@ function readServerStore(): ServerStoreData {
   };
 }
 
-function writeServerStore(next: ServerStoreData): void {
+function writeServerStore(next: Record<string, unknown>) {
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -86,7 +76,7 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
-// Extract 11-char YouTube Video ID safely
+// Extract YouTube Video ID safely
 function extractYouTubeId(rawUrl: string): string | null {
   try {
     const trimmed = rawUrl.trim();
@@ -109,11 +99,7 @@ function extractYouTubeId(rawUrl: string): string | null {
   }
 }
 
-async function resolveVerifiedIdentity(req: express.Request): Promise<{
-  email: string;
-  uid: string;
-  isAdmin: boolean;
-}> {
+async function resolveVerifiedIdentity(req: express.Request) {
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : '';
   const bodyEmail =
@@ -126,15 +112,10 @@ async function resolveVerifiedIdentity(req: express.Request): Promise<{
     if (parts.length === 3) {
       try {
         const payloadJson = Buffer.from(parts[1], 'base64url').toString('utf8');
-        const payload = JSON.parse(payloadJson) as {
-          email?: string;
-          email_verified?: boolean;
-          exp?: number;
-          sub?: string;
-        };
+        const payload = JSON.parse(payloadJson) || {};
         const nowSec = Math.floor(Date.now() / 1000);
         if (!payload.exp || payload.exp >= nowSec - 60) {
-          const email = (payload.email || '').trim().toLowerCase();
+          const email = typeof payload.email === 'string' ? payload.email.trim().toLowerCase() : '';
           const isVerified = payload.email_verified !== false;
           const isAdmin = Boolean(isVerified && email && ADMIN_ALLOWLIST.has(email));
           return {
@@ -154,12 +135,8 @@ async function resolveVerifiedIdentity(req: express.Request): Promise<{
         headers: { Authorization: `Bearer ${token}` },
       });
       if (userInfoRes.ok) {
-        const info = (await userInfoRes.json()) as {
-          sub?: string;
-          email?: string;
-          email_verified?: boolean;
-        };
-        const email = (info.email || '').trim().toLowerCase();
+        const info = (await userInfoRes.json()) || {};
+        const email = typeof info.email === 'string' ? info.email.trim().toLowerCase() : '';
         const isVerified = info.email_verified !== false;
         const isAdmin = Boolean(isVerified && email && ADMIN_ALLOWLIST.has(email));
         return {
@@ -187,7 +164,7 @@ async function resolveVerifiedIdentity(req: express.Request): Promise<{
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   app.disable('x-powered-by');
   app.use(express.json({ limit: '5mb' }));
@@ -207,7 +184,8 @@ async function startServer() {
     const identity = await resolveVerifiedIdentity(req);
     const store = readServerStore();
     const profileKey = identity.uid || identity.email;
-    const savedProfile = profileKey ? store.profiles[profileKey] : undefined;
+    const profilesMap = store.profiles as Record<string, { displayName?: string }>;
+    const savedProfile = profileKey ? profilesMap[profileKey] : undefined;
 
     res.json({
       isAdmin: identity.isAdmin,
@@ -231,12 +209,13 @@ async function startServer() {
     }
 
     const store = readServerStore();
+    const profilesMap = store.profiles as Record<string, { displayName: string; updatedAt: string }>;
     const updatedAt = new Date().toISOString();
     if (identity.uid) {
-      store.profiles[identity.uid] = { displayName: cleanName, updatedAt };
+      profilesMap[identity.uid] = { displayName: cleanName, updatedAt };
     }
     if (identity.email) {
-      store.profiles[identity.email] = { displayName: cleanName, updatedAt };
+      profilesMap[identity.email] = { displayName: cleanName, updatedAt };
     }
     writeServerStore(store);
 
@@ -316,17 +295,13 @@ async function startServer() {
         return;
       }
 
-      const data = (await response.json()) as {
-        title?: string;
-        author_name?: string;
-        thumbnail_url?: string;
-      };
+      const data = (await response.json()) || {};
 
       res.json({
         youtube_id: videoId,
-        title: data.title || '',
-        author_name: data.author_name || 'DecodeWithTech',
-        thumbnail_url: data.thumbnail_url || fallbackThumbnail,
+        title: typeof data.title === 'string' ? data.title : '',
+        author_name: typeof data.author_name === 'string' ? data.author_name : 'DecodeWithTech',
+        thumbnail_url: typeof data.thumbnail_url === 'string' ? data.thumbnail_url : fallbackThumbnail,
       });
     } catch {
       res.json({
@@ -338,16 +313,19 @@ async function startServer() {
     }
   });
 
-  if (process.env.NODE_ENV !== 'production') {
+  const distPath = path.join(__dirname, 'dist');
+  const hasBuiltDist = fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (process.env.NODE_ENV !== 'production' || !hasBuiltDist) {
+    const { createServer: createViteServer } = await import('vite');
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*all', (_req, res) => {
+    app.use((_req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
